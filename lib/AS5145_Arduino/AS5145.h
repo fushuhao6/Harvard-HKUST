@@ -2,6 +2,8 @@
 #define AS5145_h
 
 #include "Arduino.h"
+#include "PPTrim.h"
+
 
 class AS5145
 {
@@ -29,6 +31,13 @@ class AS5145
     const uint16_t _pwm;	  // pwm input pin: input
     
 };
+
+
+
+
+
+
+
 
 #endif
 

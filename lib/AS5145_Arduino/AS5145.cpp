@@ -68,19 +68,22 @@ uint32_t AS5145::read_chip(void)
   uint16_t c;
   digitalWrite(_pdio, LOW);
   digitalWrite(_cs, HIGH);
+  delayMicroseconds(50);
   digitalWrite(_clock, HIGH);
+  delayMicroseconds(50);
   digitalWrite(_cs, LOW);
   delayMicroseconds(50);
   digitalWrite(_clock, LOW);
+  delayMicroseconds(50);
   // read 18 bits
   for (c = 0; c < 18; c++)
   {
     digitalWrite(_clock, HIGH);
-    delayMicroseconds(5);
+    delayMicroseconds(10);
     inputstream = digitalRead(_data);
     raw_value = ((raw_value << 1) + inputstream);
     digitalWrite(_clock, LOW);
-    delayMicroseconds(5);
+    delayMicroseconds(10);
   }
  return raw_value;
 }
