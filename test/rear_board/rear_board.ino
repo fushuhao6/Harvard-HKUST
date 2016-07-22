@@ -43,10 +43,10 @@ uint16_t init_angle = 0;
 #endif
 
 void setup()   {
-  Serial.begin(9600);
+  Serial.begin(9600);          // communicate with Arduino Due
   pinMode(BUTTON_A, INPUT);    // declare pushbutton as input
-  pinMode(P_LR, OUTPUT);
-  pinMode(P_PWM, OUTPUT);       // declare pwm pin
+  pinMode(P_LR, OUTPUT);       // declare red led
+  pinMode(P_PWM, OUTPUT);      // declare pwm pin
   
   m_time = millis();
   
@@ -66,12 +66,11 @@ void setup()   {
 
 bool led_status = false;
 bool last_state = true;
-bool state = true;
+uint8_t print_count = 0;
 
 void loop() {
   if(millis() - m_time >= MAIN_TIME){
     m_time = millis();
-    state = false;
     
     // clear everything before print
     display.clearDisplay();
