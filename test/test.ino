@@ -9,9 +9,6 @@
 #define ANGLE_THRESHOLD 3
 #define BREAK_THRESHOLD 20
 
-// absolute function for encoder
-uint16_t m_abs(uint16_t val1, uint16_t val2);
-uint8_t get_duty_cycle(uint16_t value);
 
 // motor control functions
 void setMotor(uint8_t pwm_value, boolean dir);    // drive-coast mode, no e-breaking, DIR: L forward, H backward
@@ -64,7 +61,7 @@ void setup()
   analogWrite(PWMH, 0);
   
   Serial.begin(9600);         // output to the terminal
-  Serial1.begin(9600);        // communicate with feather
+  Serial1.begin(115200);        // communicate with feather
   Serial2.begin(9600);        // bluetooth
   m_time = millis();
   delay(1000);
@@ -126,28 +123,21 @@ void loop()
     temp1 = analogRead(Temp1);
     temp1 = (temp1 * 3300 / 1023.0 - 500) / 10;
 
-    // store data into SD Card
+    // test, delete it afterward
+    pwm = 200;
+    break_angle = 200;
 
     //communicate with feather
     Serial1.print("pwm\n");         Serial1.println(pwm);
     Serial1.print("break_angle\n"); Serial1.println(break_angle);
-    Serial1.print("current\n");     Serial1.println(current);
-    Serial1.print("voltage\n");     Serial1.println(voltage);
-
     
 
     // print every 10 loops
-    if(print_count >= 10){
+    if(print_count >= 9){
       print_count = 0;
 
-      Serial.print("init angle is: ");
-      Serial.println(gas_init_angle); 
-      Serial.print("abs angle is: ");
-      Serial.println(value); 
-      Serial.print("gas pedal angle is: ");
-      Serial.println(m_abs(value, gas_init_angle));
-      Serial.print("pwm is: ");
-      Serial.println(pwm); 
+      Serial.print("pwm\n");         Serial.println(pwm);
+      Serial.print("break_angle\n"); Serial.println(break_angle);
 
       Serial2.print("init angle is: ");
       Serial2.println(gas_init_angle); 
