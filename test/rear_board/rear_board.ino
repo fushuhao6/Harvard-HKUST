@@ -30,7 +30,6 @@
 #define MAX_PWM 255
 #define ANGLE_THRESHOLD 3
 #define BREAK_THRESHOLD 20
-#define MAIN_TIME 50
 
 
 Adafruit_SSD1306 display(OLED_RESET);

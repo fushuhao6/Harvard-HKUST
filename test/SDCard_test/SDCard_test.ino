@@ -1,74 +1,77 @@
+/*
+  SD card read/write
+
+ This example shows how to read and write data to and from an SD card file
+ The circuit:
+ * SD card attached to SPI bus as follows:
+ ** MOSI - pin 11
+ ** MISO - pin 12
+ ** CLK - pin 13
+ ** CS - pin 4
+
+ created   Nov 2010
+ by David A. Mellis
+ modified 9 Apr 2012
+ by Tom Igoe
+
+ This example code is in the public domain.
+
+ */
+
 #include <SPI.h>
 #include <SD.h>
 
-// Set the pins used
-#define cardSelect 4
-
-File logfile;
-
-// blink out an error code
-void error(uint8_t errno) {
-  while(1) {
-    uint8_t i;
-    for (i=0; i<errno; i++) {
-      digitalWrite(13, HIGH);
-      delay(100);
-      digitalWrite(13, LOW);
-      delay(100);
-    }
-    for (i=errno; i<10; i++) {
-      delay(200);
-    }
-  }
-}
-
-// This line is not needed if you have Adafruit SAMD board package 1.6.2+
-//   #define Serial SerialUSB
+File myFile;
 
 void setup() {
-  // connect at 115200 so we can read the GPS fast enough and echo without dropping chars
-  // also spit it out
-  Serial.begin(115200);
-  Serial.println("\r\nAnalog logger test");
-  pinMode(13, OUTPUT);
-
-
-  // see if the card is present and can be initialized:
-  if (!SD.begin(cardSelect)) {
-    Serial.println("Card init. failed!");
-    error(2);
+  // Open serial communications and wait for port to open:
+  Serial.begin(9600);
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB port only
   }
-  char filename[15];
-  strcpy(filename, "ANALOG00.TXT");
-  for (uint8_t i = 0; i < 100; i++) {
-    filename[6] = '0' + i/10;
-    filename[7] = '0' + i%10;
-    // create if does not exist, do not open existing, write, sync after write
-    if (! SD.exists(filename)) {
-      break;
+
+
+  Serial.print("Initializing SD card...");
+
+  if (!SD.begin(4)) {
+    Serial.println("initialization failed!");
+    return;
+  }
+  Serial.println("initialization done.");
+
+  // open the file. note that only one file can be open at a time,
+  // so you have to close this one before opening another.
+  myFile = SD.open("test.txt", FILE_WRITE);
+
+  // if the file opened okay, write to it:
+  if (myFile) {
+    Serial.print("Writing to test.txt...");
+    myFile.println("testing 1, 2, 3.");
+    // close the file:
+    myFile.close();
+    Serial.println("done.");
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening test.txt");
+  }
+
+  // re-open the file for reading:
+  myFile = SD.open("test.txt");
+  if (myFile) {
+    Serial.println("test.txt:");
+
+    // read from the file until there's nothing else in it:
+    while (myFile.available()) {
+      Serial.write(myFile.read());
     }
+    // close the file:
+    myFile.close();
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening test.txt");
   }
-
-  logfile = SD.open(filename, FILE_WRITE);
-  if( ! logfile ) {
-    Serial.print("Couldnt create "); 
-    Serial.println(filename);
-    error(3);
-  }
-  Serial.print("Writing to "); 
-  Serial.println(filename);
-
-  pinMode(13, OUTPUT);
-  pinMode(8, OUTPUT);
-  Serial.println("Ready!");
 }
 
-uint8_t i=0;
 void loop() {
-  digitalWrite(8, HIGH);
-  logfile.print("A0 = "); logfile.println(analogRead(0));
-  Serial.print("A0 = "); Serial.println(analogRead(0));
-  digitalWrite(8, LOW);
-  
-  delay(100);
+  // nothing happens after setup
 }

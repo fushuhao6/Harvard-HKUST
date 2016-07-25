@@ -15,7 +15,7 @@ Adafruit_SSD1306 display(OLED_RESET);
 void setup() {
 
   pinMode(ledpin, OUTPUT);  // pin 48 (on-board LED) as OUTPUT
-  Serial.begin(115200);       // start serial communication at 9600bps
+  Serial.begin(9600);       // start serial communication at 9600bps
 
     // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
@@ -56,7 +56,6 @@ void loop() {
         }
       }
     }
-
     */
 
     while(Serial.available()){

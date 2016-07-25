@@ -8,6 +8,7 @@
 #define MAX_PWM 255
 #define ANGLE_THRESHOLD 3
 #define BREAK_THRESHOLD 20
+#define ENC_SIZE  6
 
 
 // motor control functions
@@ -15,16 +16,19 @@ void setMotor(uint8_t pwm_value, boolean dir);    // drive-coast mode, no e-brea
 void setEBreaking(uint8_t pwm_value);
 
 // encoders
-AS5145 encoder(7,6,5,4);      // data, clock, chip select, program input.
-AS5145 gas_pedal(7,6,5,4);    // data, clock, chip select, program input.
-AS5145 break_pedal(7,6,5,4);  // data, clock, chip select, program input.
+AS5145 encoder(7,6,5,53);      // data, clock, chip select, program input.
+AS5145 gas_pedal(10,9,8,53);    // data, clock, chip select, program input.
+AS5145 break_pedal(13,12,11,53);  // data, clock, chip select, program input.
+
+// TODO: file login
+
 
 // pin configurations
 const uint8_t P_LR = 13; //red led, init as output
-const uint8_t Temp1 = 55; // temp sensor, ADC, need to init
+const uint8_t Temp1 = 0; // temp sensor, ADC0, need to init
 const uint8_t PWML = 2;
 const uint8_t PWMH = 3;
-const uint8_t DIR = 4;            // init as output
+const uint8_t DIR = 22;            // init as output
 const uint8_t CurSenPin = 8;      // ADC, no need to init
 const uint8_t VolSenPin = 9;      // ADC, no need to init
 const uint8_t DirButton = 30;     // to control motor direction, init as input
@@ -33,8 +37,9 @@ const uint8_t DirButton = 30;     // to control motor direction, init as input
 unsigned long m_time;     // main time
 
 // angle and speed values
-uint16_t abs_angle[2] = {0};
-uint32_t measure_time[2] = {0};
+uint16_t enc_buffer[ENC_SIZE] = {0};      // for averaging usage
+float abs_angle[2] = {0};       // store past value
+uint32_t measure_time[2] = {0}; 
 float m_speed[2] = {0};
 uint16_t gas_init_angle = 0;
 uint16_t break_init_angle = 0;
@@ -61,7 +66,6 @@ void setup()
   analogWrite(PWMH, 0);
   
   Serial.begin(9600);         // output to the terminal
-  Serial1.begin(115200);        // communicate with feather
   Serial2.begin(9600);        // bluetooth
   m_time = millis();
   delay(1000);
@@ -80,7 +84,7 @@ uint8_t print_count = 0;
 / **************************/
 void loop()
 {
-
+  // loop, 50ms
   if(millis() - m_time >= MAIN_TIME){
     m_time = millis();
 
@@ -93,46 +97,46 @@ void loop()
     measure_time[0] = measure_time[1];
     float rpm = m_speed[1] * 60.0 / 360;
 
-    // measure gas pedal
-    uint16_t value = gas_pedal.encoder_degrees();
+    // measure gas pedal (with smooth function)
+    for(int i = 0; i < ENC_SIZE; i++){
+      enc_buffer[i] = gas_pedal.encoder_degrees();
+    }
+    uint16_t value = average(enc_buffer, ENC_SIZE);
     uint8_t pwm = get_pwm(value);    
 
-    // measure break pedal
-    uint16_t break_angle = m_abs(break_pedal.encoder_degrees(), break_init_angle);
+    // measure break pedal (with smooth function)
+    for(int i = 0; i < ENC_SIZE; i++){
+      enc_buffer[i] = break_pedal.encoder_degrees();
+    }
+    value = average(enc_buffer, ENC_SIZE);
+    uint16_t break_angle = m_abs(value, break_init_angle);
 
     // current sensor and voltage sensor (have not implemented calculation)
     uint16_t current = analogRead(CurSenPin);
     uint16_t voltage = analogRead(VolSenPin);
 
+    // measure temp (may have more temp sensors)
+    temp1 = analogRead(Temp1);
+    temp1 = (temp1 * 3300 / 1023.0 - 500) / 10;
+
     // give pwm to the motor driver iff no breaking and power <= 420W
     if(break_angle <= ANGLE_THRESHOLD && (voltage * current) <= 420){
       
-      // add direction code here if you have the button
+      //TODO: add direction code here if you have the button
       setMotor(pwm, LOW);
     } else if ((voltage * current) > 420 || (break_angle > ANGLE_THRESHOLD && break_angle < BREAK_THRESHOLD)) {       // else if overdrive or little breaking
       setMotor(0, LOW);       // shut down the motor, coasting
-    } else {             // breaking hard
+    } else {                  // breaking hard
       uint8_t e_pwm = (break_angle - BREAK_THRESHOLD) / (MAX_ANGLE - BREAK_THRESHOLD) * MAX_PWM;
       if(e_pwm > 200)
         e_pwm = 200;
       setEBreaking(e_pwm);    // e-breaking
     }
+
     
-
-    // measure temp (may have more temp sensors, and move this part to feather)
-    temp1 = analogRead(Temp1);
-    temp1 = (temp1 * 3300 / 1023.0 - 500) / 10;
-
-    // test, delete it afterward
-    pwm = 200;
-    break_angle = 200;
-
-    //communicate with feather
-    Serial1.print("pwm\n");         Serial1.println(pwm);
-    Serial1.print("break_angle\n"); Serial1.println(break_angle);
     
-
-    // print every 10 loops
+    
+    // print every 10 loops, 500ms
     if(print_count >= 9){
       print_count = 0;
 
@@ -194,6 +198,33 @@ void setEBreaking(uint8_t pwm_value)
 }
 
 
+float average(uint16_t values[], uint8_t m_size){
+  if(m_size >= 4){
+    float m_buffer = 0;
+    uint8_t max_index = 0, min_index = 0;
+    // remove max and min
+    for(int i = 1; i < m_size; i++){
+      if(values[i] > values[max_index]){
+        max_index = i;
+      } else if(values[i] < values[min_index]){
+        min_index = i;
+      }
+    }
+    // average
+    for(int i = 0; i < m_size; i++){
+      if(i != min_index && i != max_index)
+        m_buffer += values[i];
+    }
+    return m_buffer / (m_size - 2);
+  } else {
+    float m_buffer = 0;
+    // average
+    for(int i = 0; i < m_size; i++){
+      m_buffer += values[i];
+    }
+    return m_buffer / m_size;
+  }
+}
 
 
 
