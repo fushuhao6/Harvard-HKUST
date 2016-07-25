@@ -1,6 +1,8 @@
 #include <AS5145.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <SPI.h>
+#include <SD.h>
 
 #define MAIN_TIME 50
 #define MAX_DUTY_CYCLE 90.0
@@ -10,6 +12,8 @@
 #define BREAK_THRESHOLD 20
 #define ENC_SIZE  6
 
+// SD card
+File myFile;
 
 // motor control functions
 void setMotor(uint8_t pwm_value, boolean dir);    // drive-coast mode, no e-breaking, DIR: L forward, H backward
@@ -20,21 +24,19 @@ AS5145 encoder(7,6,5,53);      // data, clock, chip select, program input.
 AS5145 gas_pedal(10,9,8,53);    // data, clock, chip select, program input.
 AS5145 break_pedal(13,12,11,53);  // data, clock, chip select, program input.
 
-// TODO: file login
-
-
 // pin configurations
-const uint8_t P_LR = 13; //red led, init as output
-const uint8_t Temp1 = 0; // temp sensor, ADC0, need to init
+const uint8_t P_LR = 13;          //red led, init as output
+const uint8_t Temp1 = 0;          // temp sensor, ADC0, need to init
 const uint8_t PWML = 2;
 const uint8_t PWMH = 3;
-const uint8_t DIR = 22;            // init as output
+const uint8_t DIR = 22;           // init as output
 const uint8_t CurSenPin = 8;      // ADC, no need to init
 const uint8_t VolSenPin = 9;      // ADC, no need to init
 const uint8_t DirButton = 30;     // to control motor direction, init as input
 
-// time configurations
+// time config
 unsigned long m_time;     // main time
+unsigned long init_time;  // for sd card to store time
 
 // angle and speed values
 uint16_t enc_buffer[ENC_SIZE] = {0};      // for averaging usage
@@ -55,8 +57,17 @@ void setup()
   digitalWrite(DIR, LOW);
   digitalWrite(P_LR, LOW);
 
-  gas_init_angle = gas_pedal.encoder_degrees();
-  break_init_angle = break_pedal.encoder_degrees();
+
+  for(int i = 0; i < ENC_SIZE; i++){
+      enc_buffer[i] = break_pedal.encoder_degrees();
+  }
+  break_init_angle = average(enc_buffer, ENC_SIZE);
+
+  for(int i = 0; i < ENC_SIZE; i++){
+      enc_buffer[i] = gas_pedal.encoder_degrees();
+  }
+  gas_init_angle = average(enc_buffer, ENC_SIZE);
+  
   abs_angle[0] = encoder.encoder_degrees();
   abs_angle[1] = abs_angle[0];
   measure_time[0] = millis();
@@ -67,7 +78,27 @@ void setup()
   
   Serial.begin(9600);         // output to the terminal
   Serial2.begin(9600);        // bluetooth
+
+  if (!SD.begin(4)) {
+    Serial.println("initialization failed!");
+    return;
+  }
+  Serial.println("initialization done.");
+
+    // open the file. note that only one file can be open at a time,
+  // so you have to close this one before opening another.
+  myFile = SD.open("data.txt", FILE_WRITE);
+
+  // if the file opened okay, write to it:
+  if (myFile) {    
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening test.txt");
+  }
+
+  
   m_time = millis();
+  init_time = m_time;
   delay(1000);
 }
 
@@ -139,7 +170,7 @@ void loop()
     // print every 10 loops, 500ms
     if(print_count >= 9){
       print_count = 0;
-
+      
       Serial.print("pwm\n");         Serial.println(pwm);
       Serial.print("break_angle\n"); Serial.println(break_angle);
 
@@ -151,6 +182,11 @@ void loop()
       Serial2.println(m_abs(value, gas_init_angle));
       Serial2.print("pwm is: ");
       Serial2.println(pwm); 
+
+      // store data to the SD card
+      myFile.print("time\t");         myFile.print(millis() - init_time);           myFile.print("ms\t");
+      myFile.print("current\t");      myFile.print(current);                        myFile.print("A\t");
+      myFile.print("voltage\t");      myFile.print(voltage);                        myFile.print("V"); 
 
       led_state = !led_state;
       digitalWrite(P_LR, led_state);  // LED blinking
