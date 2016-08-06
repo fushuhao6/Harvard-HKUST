@@ -5,12 +5,12 @@
 #include <SD.h>
 
 #define MAIN_TIME 50
-#define MAX_DUTY_CYCLE 90.0
-#define MAX_ANGLE 70.0
+#define MAX_ANGLE 55.0
 #define MAX_PWM 255
 #define ANGLE_THRESHOLD 3
-#define BREAK_THRESHOLD 20
+#define BREAK_THRESHOLD 12.0
 #define ENC_SIZE  6
+#define DRIVER_NUM  6
 
 // SD card
 File myFile;
@@ -20,53 +20,75 @@ void setMotor(uint8_t pwm_value, boolean dir);    // drive-coast mode, no e-brea
 void setEBreaking(uint8_t pwm_value);
 
 // encoders
-AS5145 encoder(7,6,5,53);      // data, clock, chip select, program input.
-AS5145 gas_pedal(10,9,8,53);    // data, clock, chip select, program input.
-AS5145 break_pedal(13,12,11,53);  // data, clock, chip select, program input.
+AS5145 break_pedal(7,6,5,53);       // data, clock, chip select, program input.
+AS5145 gas_pedal(36,38,40,53);    // data, clock, chip select, program input.
+AS5145 encoder(42,44,46,53);      // data, clock, chip select, program input.
 
 // pin configurations
-const uint8_t P_LR = 13;          //red led, init as output
-const uint8_t Temp1 = 0;          // temp sensor, ADC0, need to init
-const uint8_t PWML = 2;
-const uint8_t PWMH = 3;
-const uint8_t DIR = 22;           // init as output
-const uint8_t CurSenPin = 8;      // ADC, no need to init
-const uint8_t VolSenPin = 9;      // ADC, no need to init
-const uint8_t DirButton = 30;     // to control motor direction, init as input
+const uint8_t Temp1 = 54;          // temp sensor for battery 1, ADC0, need to init
+const uint8_t Temp2 = 55;          // temp sensor for motor, ADC1, need to init
+
+const uint8_t PWML = 8;
+const uint8_t PWMH = 9;
+const uint8_t DIR = 24;                   // init as output
+const uint8_t CurSenPin = 62;             // ADC8, no need to init
+const uint8_t CurSenIn = 63;              // ADC9, no need to init
+const uint8_t P_VolSensor_MOT = 64;       // ADC10, no need to init
+const uint8_t P_VolSensor_BAT = 65;       // ADC11, no need to init
+const uint8_t DirButton = 30;             // to control motor direction, init as input
+const uint8_t P_BreakLight = 32;          // to control the break light, init as output
+const uint8_t P_LR = 47;          // Red LED, init as output
+const uint8_t P_LY = 49;          // Yellow LED, init as output
+const uint8_t P_LG = 51;          // Green LED, init as output
 
 // time config
 unsigned long m_time;     // main time
 unsigned long init_time;  // for sd card to store time
 
 // angle and speed values
-uint16_t enc_buffer[ENC_SIZE] = {0};      // for averaging usage
-float abs_angle[2] = {0};       // store past value
+uint8_t enc_buffer[ENC_SIZE] = {0};      // for averaging usage
+uint8_t abs_angle[2] = {0};       // store past value
 uint32_t measure_time[2] = {0}; 
 float m_speed[2] = {0};
-uint16_t gas_init_angle = 0;
-uint16_t break_init_angle = 0;
+uint8_t gas_init_angle = 0;
+uint8_t break_init_angle = 0;
 
 // temp config
-int temp1 = 0;
+float temp1 = 0;        // temp sensor for battery 1
+float temp2 = 0;        // temp sensor for motor
 
 void setup()
 {
   pinMode(P_LR, OUTPUT);
+  pinMode(P_LY, OUTPUT);
+  pinMode(P_LG, OUTPUT);
   pinMode(DIR, OUTPUT);
   pinMode(DirButton, INPUT);
+  pinMode(PWMH, OUTPUT);
+  pinMode(PWML, OUTPUT);
+  pinMode(P_BreakLight, OUTPUT);
+  //pinMode(P_VolSensor_MOT, INPUT);
+  //pinMode(P_VolSensor_BAT, INPUT);
   digitalWrite(DIR, LOW);
   digitalWrite(P_LR, LOW);
+  digitalWrite(P_LY, HIGH);
+  digitalWrite(P_LG, LOW);
+  digitalWrite(P_BreakLight, LOW);
 
+  uint8_t init_buffer[ENC_SIZE] = {0};
+  //while(gas_init_angle == 0){
+    for(int i = 0; i < ENC_SIZE; i++){
+        init_buffer[i] = break_pedal.encoder_degrees();
+    }
+    break_init_angle = average(init_buffer, ENC_SIZE);
+  //}
 
-  for(int i = 0; i < ENC_SIZE; i++){
-      enc_buffer[i] = break_pedal.encoder_degrees();
-  }
-  break_init_angle = average(enc_buffer, ENC_SIZE);
-
-  for(int i = 0; i < ENC_SIZE; i++){
-      enc_buffer[i] = gas_pedal.encoder_degrees();
-  }
-  gas_init_angle = average(enc_buffer, ENC_SIZE);
+  //while(break_init_angle == 0){
+    for(int i = 0; i < ENC_SIZE; i++){
+        init_buffer[i] = gas_pedal.encoder_degrees();
+    }
+    gas_init_angle = average(init_buffer, ENC_SIZE);
+  //}
   
   abs_angle[0] = encoder.encoder_degrees();
   abs_angle[1] = abs_angle[0];
@@ -87,10 +109,44 @@ void setup()
 
     // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
+  char filename[15] = "\0";
   myFile = SD.open("data.txt", FILE_WRITE);
+  Serial.println("Please input your name Bitch Ass Hoez!!!");
+  Serial2.print("Please input your name Bitch Ass Hoez!!!\t");     Serial2.println("(less than 8 characters)");
+  while(strcmp(filename, "\0") == 0){
+    digitalWrite(P_LR, HIGH);
+    if(Serial2.available()){
+      delay(100);
+      int i = 0;
+      for(i = 0; i < 10 && Serial2.available(); i++){
+        filename[i] = Serial2.read();
+      }
+      filename[i++] = '.';
+      filename[i++] = 't';
+      filename[i++] = 'x';
+      filename[i++] = 't';
+      filename[i++] = '\0';
+      myFile.close();
+      myFile = SD.open(filename, FILE_WRITE);
+      digitalWrite(P_LR, HIGH);
+      while(1){
+        if (m_abs(break_pedal.encoder_degrees(), break_init_angle) > ANGLE_THRESHOLD){
+          break;
+        }
+      }
+      digitalWrite(P_LR, LOW);
+      break;
+    } else if (m_abs(break_pedal.encoder_degrees(), break_init_angle) > ANGLE_THRESHOLD){
+      digitalWrite(P_LR, LOW);
+      break;
+    }
+  }
+
+  Serial2.print("filename is ");        Serial2.println(filename);
 
   // if the file opened okay, write to it:
-  if (myFile) {    
+  if (myFile) {
+    Serial2.println("initialization done.");
   } else {
     // if the file didn't open, print an error:
     Serial.println("error opening test.txt");
@@ -122,17 +178,18 @@ void loop()
     // measure speed (move this part to feather)
     abs_angle[1] = encoder.encoder_degrees();
     measure_time[1] = millis();
-    m_speed[1] = (abs_angle[1] - abs_angle[0]) * 1000 / (measure_time[1] - measure_time[0]);       // degrees per second
+    m_speed[1] = (m_abs(abs_angle[1], abs_angle[0])) * 1000 / (measure_time[1] - measure_time[0]);       // degrees per second
     // update time and angle
     abs_angle[0] = abs_angle[1];
     measure_time[0] = measure_time[1];
     float rpm = m_speed[1] * 60.0 / 360;
 
+
     // measure gas pedal (with smooth function)
     for(int i = 0; i < ENC_SIZE; i++){
       enc_buffer[i] = gas_pedal.encoder_degrees();
     }
-    uint16_t value = average(enc_buffer, ENC_SIZE);
+    uint8_t value = average(enc_buffer, ENC_SIZE);
     uint8_t pwm = get_pwm(value);    
 
     // measure break pedal (with smooth function)
@@ -140,56 +197,94 @@ void loop()
       enc_buffer[i] = break_pedal.encoder_degrees();
     }
     value = average(enc_buffer, ENC_SIZE);
+    
     uint16_t break_angle = m_abs(value, break_init_angle);
 
-    // current sensor and voltage sensor (have not implemented calculation)
-    uint16_t current = analogRead(CurSenPin);
-    uint16_t voltage = analogRead(VolSenPin);
+
+    // current sensor and voltage sensor
+    float cur_buffer = 0;
+    for(int i = 0; i < 3; i++){
+      cur_buffer += analogRead(CurSenPin);
+    }
+    float current = (cur_buffer / 3.0) / 1023.0 * 3.3 / 33 * 53;
+
+    cur_buffer = 0;
+    for(int i = 0; i < 3; i++){
+      cur_buffer += analogRead(CurSenIn);
+    }
+    float input_current = (cur_buffer/ 3.0) / 1023.0 * 3.3 / 33 * 53;
+
+    float real_cur = (current - input_current / 2) / 0.066;
+
+    float mot_voltage = analogRead(P_VolSensor_MOT) / 1023.0 / 3.0 * 46.0 * 3.3;
+    float bat_voltage = analogRead(P_VolSensor_BAT) / 1023.0 / 3.0 * 46.0 * 3.3;
+
+
 
     // measure temp (may have more temp sensors)
     temp1 = analogRead(Temp1);
     temp1 = (temp1 * 3300 / 1023.0 - 500) / 10;
+    temp2 = (analogRead(Temp2) * 3300 / 1023.0 - 500) / 10;
+
+
 
     // give pwm to the motor driver iff no breaking and power <= 420W
-    if(break_angle <= ANGLE_THRESHOLD && (voltage * current) <= 420){
+    if(break_angle <= ANGLE_THRESHOLD /*&& (voltage * current) <= 420*/){
       
       //TODO: add direction code here if you have the button
-      setMotor(pwm, LOW);
-    } else if ((voltage * current) > 420 || (break_angle > ANGLE_THRESHOLD && break_angle < BREAK_THRESHOLD)) {       // else if overdrive or little breaking
-      setMotor(0, LOW);       // shut down the motor, coasting
-    } else {                  // breaking hard
+      boolean dir = digitalRead(DirButton);
+      digitalWrite(P_BreakLight, LOW);
+      setMotor(pwm, dir);
+    } else if (/*(voltage * current) > 420 ||*/ (break_angle > ANGLE_THRESHOLD /*&& break_angle < BREAK_THRESHOLD*/)) {       // else if overdrive or little breaking
+      //setMotor(0, LOW);       // shut down the motor, coasting
+      digitalWrite(P_BreakLight, HIGH);
+    } 
+    /*else {                  // breaking hard
       uint8_t e_pwm = (break_angle - BREAK_THRESHOLD) / (MAX_ANGLE - BREAK_THRESHOLD) * MAX_PWM;
       if(e_pwm > 200)
         e_pwm = 200;
       setEBreaking(e_pwm);    // e-breaking
+      digitalWrite(P_BreakLight, HIGH);
     }
-
-    
-    
-    
+    */
+    setMotor(pwm, digitalRead(DirButton));
     // print every 10 loops, 500ms
     if(print_count >= 9){
       print_count = 0;
+
+      //Serial.print("init_angle is\n");    Serial.println(gas_init_angle);
+      //Serial.print("pwm\t");              Serial.println(pwm);
+      //Serial.print("raw data\t");         Serial.println(gas_pedal.encoder_degrees());
+      //Serial.print("break_angle\n");      Serial.println(break_angle);
+      Serial.print("rpm\t");         Serial.println(rpm);
+      //Serial.print("abs_angle\t");         Serial.println(abs_angle[1]);
+      Serial.print("current is \t");         Serial.println(current);
+      Serial.print("Input current is \t");         Serial.println(input_current);
+      Serial.print("Real current is \t");         Serial.println(real_cur);
+      //Serial.print("Battery temp is \t");          Serial.println(temp1);
+      //Serial.print("Motor temp is \t");           Serial.println(temp2);
       
-      Serial.print("pwm\n");         Serial.println(pwm);
-      Serial.print("break_angle\n"); Serial.println(break_angle);
 
-      Serial2.print("init angle is: ");
-      Serial2.println(gas_init_angle); 
-      Serial2.print("abs angle is: ");
-      Serial2.println(value); 
-      Serial2.print("gas pedal angle is: ");
-      Serial2.println(m_abs(value, gas_init_angle));
-      Serial2.print("pwm is: ");
-      Serial2.println(pwm); 
-
+      //Serial2.print("init_angle is\n");    Serial2.println(gas_init_angle);
+      Serial2.print("pwm ");              Serial2.println(pwm);
+      Serial2.print("rpm ");              Serial2.println(rpm);
+      //Serial2.print("raw data\t");         Serial2.println(gas_pedal.encoder_degrees());
+      //Serial2.print("Break angle\t");       Serial2.println(break_pedal.encoder_degrees());
+      Serial2.print("current ");      Serial2.println(real_cur);
+      Serial2.print("voltage ");      Serial2.println(mot_voltage);        
+                 
       // store data to the SD card
-      myFile.print("time\t");         myFile.print(millis() - init_time);           myFile.print("ms\t");
-      myFile.print("current\t");      myFile.print(current);                        myFile.print("A\t");
-      myFile.print("voltage\t");      myFile.print(voltage);                        myFile.print("V"); 
+      myFile.print("time\t");                       myFile.print(millis() - init_time);           myFile.print("ms\t");
+      myFile.print("rpm\t");                        myFile.print(rpm);                            myFile.print("\t");
+      myFile.print("Battery temp is \t");           myFile.print(temp1);                myFile.print("\t");
+      myFile.print("Motor temp is \t");           myFile.print(temp2);                  myFile.print("\t");
+      myFile.print("current\t");      myFile.print(real_cur);                        myFile.print("A\t");
+      myFile.print("voltage\t");      myFile.print(mot_voltage);                    myFile.println("V"); 
+      
+      myFile.flush();
 
       led_state = !led_state;
-      digitalWrite(P_LR, led_state);  // LED blinking
+      digitalWrite(P_LG, led_state);  // LED blinking
     }
 
     print_count++;  
@@ -211,10 +306,12 @@ uint16_t m_abs(uint16_t val1, uint16_t val2){
 
 
 uint8_t get_pwm(uint16_t value){
-  uint16_t angle = m_abs(value, gas_init_angle);
-  
+  uint8_t angle = m_abs(value, gas_init_angle);
+
+  if(angle < ANGLE_THRESHOLD)
+    return 0;
   // cubic output to motor
-  uint16_t pwm = angle * angle * MAX_DUTY_CYCLE * MAX_PWM / (100 * MAX_ANGLE * MAX_ANGLE);
+  uint16_t pwm = angle * angle * MAX_PWM / ( MAX_ANGLE * MAX_ANGLE);
   return pwm < MAX_PWM? pwm:MAX_PWM;
 }
 
@@ -230,16 +327,16 @@ void setMotor(uint8_t pwm_value, boolean dir)       // drive-coast mode, no e-br
 void setEBreaking(uint8_t pwm_value)
 {
   analogWrite(PWMH, 0);
-  analogWrite(PWML, pwm_value);
+  analogWrite(PWML, 0);
 }
 
 
-float average(uint16_t values[], uint8_t m_size){
+float average(uint8_t values[], uint8_t m_size){
   if(m_size >= 4){
     float m_buffer = 0;
-    uint8_t max_index = 0, min_index = 0;
+    uint8_t max_index = 0, min_index = 1;
     // remove max and min
-    for(int i = 1; i < m_size; i++){
+    for(int i = 0; i < m_size; i++){
       if(values[i] > values[max_index]){
         max_index = i;
       } else if(values[i] < values[min_index]){
